@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Мои заказы в Лавке</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://unpkg.com/vue@3.4.38/dist/vue.global.prod.js"></script>
+<script src="data.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --series-1-hover: #1c5cab;
+  --accent-wash: #e7f0fc;
+  --seq-lo: #cde2fb;
+  --seq-hi: #0d366b;
+  --zero-cell: #f0efec;
+  --up: #006300;
+  --down: #b42b2b;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-1-hover: #6da7ec; --accent-wash: #1b2a3d;
+    --seq-lo: #1d2d42; --seq-hi: #9ec5f4; --zero-cell: #232322;
+    --up: #0ca30c; --down: #e66767; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-1-hover: #6da7ec; --accent-wash: #1b2a3d;
+  --seq-lo: #1d2d42; --seq-hi: #9ec5f4; --zero-cell: #232322;
+  --up: #0ca30c; --down: #e66767; --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap { max-width: 1320px; margin: 0 auto; padding: 24px 24px 64px; }
+header h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -.01em; }
+header p { margin: 0; color: var(--ink-2); }
+
+/* Filters */
+.filters {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: flex-end;
+  margin: 20px -24px 20px; padding: 12px 24px;
+  background: color-mix(in srgb, var(--page) 92%, transparent);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
+}
+.fgroup { display: flex; flex-direction: column; gap: 4px; }
+.fgroup > label, .flabel { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+select, input[type=date], input[type=search] {
+  font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; min-height: 34px;
+}
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+.seg button {
+  font: inherit; border: 0; background: transparent; color: var(--ink-2);
+  padding: 5px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+.seg button:hover { background: var(--accent-wash); }
+.seg button.on { background: var(--ink); color: var(--surface); }
+.dates { display: flex; gap: 6px; align-items: center; }
+.btn {
+  font: inherit; border: 1px solid var(--border); background: var(--surface); color: var(--ink);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; min-height: 34px;
+}
+.btn:hover { background: var(--accent-wash); }
+.crumb { font-size: 13px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+
+/* Cards */
+.grid { display: grid; gap: 16px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 18px 20px; box-shadow: var(--shadow); min-width: 0;
+}
+.card h2 { font-size: 16px; margin: 0; }
+.card .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.section-title { font-size: 20px; margin: 36px 0 12px; }
+
+.kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.kpi { padding: 16px 18px; }
+.kpi .k-label { color: var(--ink-2); font-size: 13px; }
+.kpi .k-value { font-size: 28px; font-weight: 650; margin: 2px 0 2px; letter-spacing: -.01em; }
+.kpi .k-delta { font-size: 12px; color: var(--muted); }
+.kpi .k-delta b { font-weight: 600; }
+.kpi .k-delta .up { color: var(--up); }
+.kpi .k-delta .down { color: var(--down); }
+
+.chart { width: 100%; position: relative; }
+.chart svg { display: block; overflow: visible; }
+.chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .lbl { fill: var(--ink-2); font-size: 12px; }
+.chart .val { fill: var(--ink); font-size: 12px; font-weight: 600; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .baseline { stroke: var(--axis); stroke-width: 1; }
+.chart .bar { fill: var(--series-1); transition: fill .12s; }
+.chart .bar.hl { fill: var(--series-1-hover); }
+.chart .halo { fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+.chart .meanline { stroke: var(--ink-2); stroke-dasharray: 3 3; stroke-width: 1; }
+.chart .hit { fill: transparent; cursor: pointer; outline: none; }
+.chart .hit:focus-visible { stroke: var(--ink); stroke-width: 1.5; }
+.chart .thumb-bg { fill: var(--zero-cell); }
+.chart .row-hit { fill: transparent; cursor: pointer; }
+.chart .row-hit:hover, .chart .row-hit.sel { fill: var(--accent-wash); }
+.hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+.two { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+
+/* Category cards */
+.cats { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.cat {
+  cursor: pointer; padding: 0; overflow: hidden; text-align: left; font: inherit; color: inherit;
+  transition: transform .12s, opacity .12s, border-color .12s;
+}
+.cat:hover { transform: translateY(-2px); }
+.cat:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+.cat.dim { opacity: .45; }
+.cat.sel { border-color: var(--series-1); box-shadow: 0 0 0 1px var(--series-1); }
+.collage { display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 59px 59px; gap: 2px; height: 120px; background: #fff; overflow: hidden; padding: 0 6px; }
+.collage img { width: 100%; height: 100%; min-height: 0; min-width: 0; object-fit: contain; background: #fff; display: block; }
+.collage img:first-child { grid-row: span 2; }
+.collage.n1 { grid-template-columns: 1fr; }
+.collage.n1 img:first-child { grid-row: span 2; }
+.collage.n2 img:first-child { grid-row: span 2; }
+.collage.n2 img:nth-child(2) { grid-row: span 2; }
+.cat-body { padding: 12px 14px 14px; }
+.cat-name { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+.cat-spend { font-size: 20px; font-weight: 650; margin-top: 2px; }
+.share { height: 6px; border-radius: 3px; background: var(--zero-cell); margin: 8px 0 8px; overflow: hidden; }
+.share > div { height: 100%; background: var(--series-1); border-radius: 3px; }
+.cat-meta { font-size: 12px; color: var(--ink-2); display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+.cat-top { font-size: 12px; color: var(--muted); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Item detail */
+.detail { display: grid; grid-template-columns: 140px minmax(0,1fr); gap: 18px; align-items: start; }
+.detail img { width: 140px; height: 140px; object-fit: contain; background: #fff; border-radius: 12px; border: 1px solid var(--border); }
+.detail h3 { margin: 0 0 4px; font-size: 18px; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 8px 0 4px; }
+.stats div { font-size: 12px; color: var(--ink-2); }
+.stats b { display: block; font-size: 17px; color: var(--ink); }
+.empty { color: var(--muted); padding: 30px 0; text-align: center; }
+
+/* Table */
+.tbl-wrap { overflow-x: auto; max-height: 560px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+th { position: sticky; top: 0; background: var(--surface); font-size: 12px; color: var(--ink-2); cursor: pointer; user-select: none; font-weight: 600; }
+th.sorted { color: var(--ink); }
+td.name { display: flex; align-items: center; gap: 10px; white-space: normal; min-width: 260px; }
+td.name img { width: 32px; height: 32px; object-fit: contain; background: #fff; border-radius: 6px; flex: none; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--accent-wash); }
+
+/* Tooltip */
+#tip {
+  position: fixed; pointer-events: none; z-index: 100; opacity: 0; transition: opacity .08s;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 10px; padding: 9px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.14);
+  font-size: 12px; min-width: 150px; max-width: 280px;
+}
+#tip .t-title { color: var(--ink-2); margin-bottom: 4px; }
+#tip .t-row { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+#tip .t-row span { color: var(--ink-2); }
+#tip .t-row b { font-size: 13px; }
+#tip img { width: 64px; height: 64px; object-fit: contain; background: #fff; border-radius: 8px; display: block; margin-bottom: 6px; }
+
+@media (max-width: 1000px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .two { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .wrap { padding: 16px 16px 48px; }
+  .filters { margin: 16px -16px; padding: 10px 16px; position: static; }
+  .kpi .k-value { font-size: 22px; }
+  .detail { grid-template-columns: 1fr; }
+  .cats { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+</style>
+</head>
+<body>
+<div id="app" class="wrap">
+  <header>
+    <h1>Мои заказы в Лавке</h1>
+    <p>{{ fmtDate(DATA_MIN) }} — {{ fmtDate(DATA_MAX) }} · {{ ORDERS.length }} заказов, {{ ITEM_COUNT }} разных позиций</p>
+  </header>
+
+  <div class="filters">
+    <div class="fgroup">
+      <label>Период</label>
+      <select v-model="preset" @change="applyPreset">
+        <option v-for="p in presets" :key="p.id" :value="p.id">{{ p.label }}</option>
+        <option value="custom" disabled>Свой диапазон</option>
+      </select>
+    </div>
+    <div class="fgroup">
+      <label>С — по</label>
+      <div class="dates">
+        <input type="date" v-model="from" :min="iso(DATA_MIN)" :max="to" @change="preset='custom'; drill=[]">
+        <input type="date" v-model="to" :min="from" :max="iso(DATA_MAX)" @change="preset='custom'; drill=[]">
+      </div>
+    </div>
+    <div class="fgroup">
+      <span class="flabel">Гранулярность</span>
+      <div class="seg">
+        <button v-for="(g,k) in GRAN" :key="k" :class="{on: gran===k}" @click="gran=k">{{ g.label }}</button>
+      </div>
+    </div>
+    <div class="fgroup">
+      <span class="flabel">Статус</span>
+      <div class="seg">
+        <button :class="{on: status==='delivered'}" @click="status='delivered'">Доставлены</button>
+        <button :class="{on: status==='canceled'}" @click="status='canceled'">Отменены</button>
+        <button :class="{on: status==='all'}" @click="status='all'">Все</button>
+      </div>
+    </div>
+    <div class="fgroup">
+      <label>Категории</label>
+      <select @change="toggleCat($event.target.value); $event.target.value=''">
+        <option value="">{{ cats.length ? 'Выбрано: ' + cats.length : 'Все категории' }}</option>
+        <option v-for="c in CATS" :key="c" :value="c">{{ cats.includes(c) ? '✓ ' : '' }}{{ c }}</option>
+      </select>
+    </div>
+    <button class="btn" v-if="isModified" @click="reset">Сбросить всё</button>
+  </div>
+
+  <div class="crumb" v-if="cats.length" style="margin:-8px 0 14px">
+    Фильтр по категориям: <b>{{ cats.join(', ') }}</b>
+    <button class="btn" style="min-height:26px;padding:2px 8px" @click="cats=[]">× снять</button>
+  </div>
+
+  <!-- KPI -->
+  <div class="grid kpis">
+    <div class="card kpi" v-for="k in kpiList" :key="k.key">
+      <div class="k-label">{{ k.label }}</div>
+      <div class="k-value">{{ k.value }}</div>
+      <div class="k-delta">
+        <template v-if="k.delta !== null">
+          <b :class="k.delta > 0 ? 'up' : (k.delta < 0 ? 'down' : '')">{{ k.delta > 0 ? '▲' : (k.delta < 0 ? '▼' : '') }} {{ fmtPct(Math.abs(k.delta)) }}</b>
+          к предыдущим {{ rangeDays }} дн.
+        </template>
+        <template v-else>{{ k.note || 'нет данных для сравнения' }}</template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main time series -->
+  <div class="card" style="margin-top:16px">
+    <div class="card-head">
+      <div>
+        <h2>{{ METRICS[metric].label }} по периодам: {{ GRAN[gran].label.toLowerCase() }}</h2>
+        <p class="sub">{{ periodsCount }} периодов · пунктир показывает среднее за период · нажмите на столбец, чтобы раскрыть его детальнее</p>
+      </div>
+      <div class="seg">
+        <button v-for="(m,k) in METRICS" :key="k" :class="{on: metric===k}" @click="metric=k">{{ m.short }}</button>
+      </div>
+    </div>
+    <div class="crumb" v-if="drill.length" style="margin-bottom:6px">
+      Детализация: <b>{{ drillLabel }}</b>
+      <button class="btn" style="min-height:26px;padding:2px 8px" @click="drillUp">← назад</button>
+    </div>
+    <div class="chart" ref="main"></div>
+  </div>
+
+  <!-- Items -->
+  <h2 class="section-title">Что я заказываю</h2>
+  <div class="grid two">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>Топ-{{ topN }} позиций</h2>
+          <p class="sub">{{ ITEM_MODES[itemMode].sub }}{{ cats.length ? ' · ' + cats.join(', ') : '' }}</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div class="seg">
+            <button v-for="(m,k) in ITEM_MODES" :key="k" :class="{on: itemMode===k}" @click="itemMode=k">{{ m.label }}</button>
+          </div>
+          <select v-model.number="topN">
+            <option :value="10">10</option><option :value="15">15</option><option :value="25">25</option>
+          </select>
+        </div>
+      </div>
+      <label class="hint" style="display:flex;gap:6px;align-items:center;margin:-4px 0 8px">
+        <input type="checkbox" v-model="showServices"> показывать доставку и упаковку
+      </label>
+      <div class="chart" ref="items"></div>
+      <div class="empty" v-if="!topItems.length">Нет позиций под выбранные фильтры</div>
+    </div>
+
+    <div class="card">
+      <template v-if="selItem">
+        <div class="card-head">
+          <h2>Карточка позиции</h2>
+          <button class="btn" style="min-height:26px;padding:2px 8px" @click="selected=null">×</button>
+        </div>
+        <div class="detail">
+          <img :src="imgOf(selItem.name)" :alt="selItem.name">
+          <div>
+            <h3>{{ selItem.name }}</h3>
+            <div class="sub">{{ selItem.cat }}</div>
+            <div class="stats">
+              <div><b>{{ selItem.orders }}</b>заказов</div>
+              <div><b>{{ fmtN(selItem.units) }}</b>штук</div>
+              <div><b>{{ rub(selItem.spend) }}</b>потрачено</div>
+              <div><b>{{ rub(selItem.spend / selItem.units) }}</b>средняя цена</div>
+              <div><b>{{ rub(selItem.disc) }}</b>скидки</div>
+              <div><b>{{ selItem.share }}</b>заказов с этой позицией</div>
+            </div>
+            <div class="hint">Впервые {{ fmtDate(selItem.first) }} · последний раз {{ fmtDate(selItem.last) }}</div>
+          </div>
+        </div>
+        <h2 style="margin-top:18px;font-size:14px">Сколько штук покупал: {{ GRAN[gran].label.toLowerCase() }}</h2>
+        <div class="chart" ref="itemTs"></div>
+      </template>
+      <template v-else>
+        <div class="card-head">
+          <div>
+            <h2>Когда я заказываю</h2>
+            <p class="sub">Число заказов по дню недели и часу оформления (показаны только часы, когда были заказы)</p>
+          </div>
+        </div>
+        <div class="chart" ref="week"></div>
+        <p class="hint">Нажмите на позицию слева или в таблице, чтобы открыть её карточку.</p>
+      </template>
+    </div>
+  </div>
+
+  <!-- Categories -->
+  <h2 class="section-title">Категории</h2>
+  <p class="sub" style="margin:-6px 0 14px;color:var(--muted)">Доля трат за выбранный период. Нажмите на карточку, чтобы отфильтровать весь дашборд по категории.</p>
+  <div class="grid cats">
+    <button class="card cat" v-for="c in catStats" :key="c.cat"
+         :class="{sel: cats.includes(c.cat), dim: cats.length && !cats.includes(c.cat)}"
+         @click="toggleCat(c.cat)" :aria-pressed="cats.includes(c.cat)">
+      <div class="collage" :class="'n' + c.imgs.length">
+        <img v-for="im in c.imgs" :key="im" :src="im" alt="" loading="lazy">
+      </div>
+      <div class="cat-body">
+        <div class="cat-name"><span>{{ c.cat }}</span><span style="color:var(--muted);font-weight:500">{{ fmtPct(c.share) }}</span></div>
+        <div class="cat-spend">{{ rub(c.spend) }}</div>
+        <div class="share"><div :style="{width: (c.share / maxCatShare * 100) + '%'}"></div></div>
+        <div class="cat-meta">
+          <span>{{ c.orders }} заказов</span><span>{{ fmtN(c.units) }} шт.</span>
+          <span>{{ c.items }} позиций</span><span>скидки {{ rub(c.disc) }}</span>
+        </div>
+        <div class="cat-top" :title="c.top">Чаще всего: {{ c.top }}</div>
+      </div>
+    </button>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-head">
+      <div>
+        <h2>Траты по категориям во времени</h2>
+        <p class="sub">Чем темнее ячейка, тем больше потрачено · гранулярность: {{ catGranLabel }}</p>
+      </div>
+    </div>
+    <div class="chart" ref="catHeat"></div>
+  </div>
+
+  <!-- Table -->
+  <div class="card" style="margin-top:16px">
+    <div class="card-head">
+      <div>
+        <h2>Все позиции</h2>
+        <p class="sub">{{ tableRows.length }} позиций с учётом фильтров · сортировка по клику на заголовок</p>
+      </div>
+      <input type="search" v-model="search" placeholder="Поиск по названию…">
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th v-for="c in COLS" :key="c.key" :class="{sorted: sortKey===c.key}" @click="sortBy(c.key)">
+            {{ c.label }}{{ sortKey===c.key ? (sortDir<0 ? ' ↓' : ' ↑') : '' }}
+          </th>
+        </tr></thead>
+        <tbody>
+          <tr v-for="r in tableRows" :key="r.name" @click="select(r.name)">
+            <td class="name"><img :src="imgOf(r.name)" alt="" loading="lazy">{{ r.name }}</td>
+            <td>{{ r.cat }}</td>
+            <td>{{ r.orders }}</td>
+            <td>{{ fmtN(r.units) }}</td>
+            <td>{{ rub(r.spend) }}</td>
+            <td>{{ rub(r.spend / r.units) }}</td>
+            <td>{{ r.disc ? rub(r.disc) : '—' }}</td>
+            <td>{{ fmtDate(r.last) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const { createApp, nextTick } = Vue;
+
+// ---------- formatting ----------
+const NF0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+const NF1 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
+const rub = v => NF0.format(Math.round(v || 0)) + ' ₽';
+const fmtN = v => NF0.format(v || 0);
+const fmtPct = v => NF1.format((v || 0) * 100) + '%';
+const DF_DAY = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+const DF_MON = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' });
+const DF_MON_S = new Intl.DateTimeFormat('ru-RU', { month: 'short' });
+const fmtDate = d => d ? DF_DAY.format(d) : '—';
+const iso = d3.timeFormat('%Y-%m-%d');
+const parseD = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const pad = n => String(n).padStart(2, '0');
+
+// ---------- data ----------
+const SERVICE = 'Услуги Лавки';
+const ORDERS = window.ORDERS.map(o => {
+  let dm = null;
+  if (o.s && o.t != null && o.c != null) { dm = o.t - o.c; if (dm < 0) dm += 1440; }
+  return {
+    id: o.id, date: parseD(o.d), delivered: !!o.s, created: o.c, dm,
+    lines: o.i.map(([name, cat, p0, p1, q]) => ({ name, cat, p0, p1, q, sum: p1 * q, disc: (p0 - p1) * q })),
+  };
+});
+const DATA_MIN = ORDERS[0].date, DATA_MAX = ORDERS[ORDERS.length - 1].date;
+const ITEM_CAT = new Map();
+ORDERS.forEach(o => o.lines.forEach(l => ITEM_CAT.set(l.name, l.cat)));
+const ITEM_COUNT = [...ITEM_CAT.values()].filter(c => c !== SERVICE).length;
+const CATS = [...new Set(ITEM_CAT.values())].sort((a, b) => a === SERVICE ? 1 : b === SERVICE ? -1 : a.localeCompare(b, 'ru'));
+const imgOf = name => window.ITEM_IMAGES[name] ? 'items/' + encodeURIComponent(window.ITEM_IMAGES[name]) : '';
+
+// ---------- granularity ----------
+const quarterFloor = d => new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
+const GRAN = {
+  day:     { label: 'День',    floor: d3.timeDay.floor,    next: d => d3.timeDay.offset(d, 1),
+             short: d => `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`, long: d => fmtDate(d), finer: null },
+  week:    { label: 'Неделя',  floor: d3.timeMonday.floor, next: d => d3.timeMonday.offset(d, 1),
+             short: d => `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`,
+             long: d => `Неделя ${fmtDate(d)} — ${fmtDate(d3.timeDay.offset(d, 6))}`, finer: 'day' },
+  month:   { label: 'Месяц',   floor: d3.timeMonth.floor,  next: d => d3.timeMonth.offset(d, 1),
+             short: d => `${DF_MON_S.format(d).replace('.', '')} ${String(d.getFullYear()).slice(2)}`, long: d => DF_MON.format(d), finer: 'day' },
+  quarter: { label: 'Квартал', floor: quarterFloor,        next: d => d3.timeMonth.offset(d, 3),
+             short: d => `Q${d.getMonth() / 3 + 1} ${String(d.getFullYear()).slice(2)}`, long: d => `${d.getMonth() / 3 + 1} квартал ${d.getFullYear()}`, finer: 'month' },
+  year:    { label: 'Год',     floor: d3.timeYear.floor,   next: d => d3.timeYear.offset(d, 1),
+             short: d => String(d.getFullYear()), long: d => `${d.getFullYear()} год`, finer: 'month' },
+};
+function periods(gran, from, to) {
+  const g = GRAN[gran], out = [];
+  for (let d = g.floor(from); d <= to; d = g.next(d)) out.push(d);
+  return out;
+}
+
+// ---------- metrics ----------
+function metrics(orders) {
+  let n = 0, spend = 0, gross = 0, disc = 0, units = 0, svc = 0, dmS = 0, dmN = 0;
+  for (const o of orders) {
+    n++;
+    for (const l of o.lines) {
+      spend += l.sum; gross += l.p0 * l.q; disc += l.disc;
+      if (l.cat === SERVICE) svc += l.sum; else units += l.q;
+    }
+    if (o.dm != null) { dmS += o.dm; dmN++; }
+  }
+  return { n, spend, gross, disc, units, svc, avg: n ? spend / n : null, dm: dmN ? dmS / dmN : null, discPct: gross ? disc / gross : 0 };
+}
+const METRICS = {
+  n:     { label: 'Заказы',               short: 'Заказы',   fmt: v => fmtN(v) + ' зак.', axis: v => fmtN(v) },
+  spend: { label: 'Траты',                short: 'Траты',    fmt: rub, axis: v => v >= 1000 ? NF0.format(v / 1000) + 'к' : fmtN(v) },
+  disc:  { label: 'Скидки',               short: 'Скидки',   fmt: rub, axis: v => v >= 1000 ? NF1.format(v / 1000) + 'к' : fmtN(v) },
+  avg:   { label: 'Средний чек',          short: 'Ср. чек',  fmt: rub, axis: v => fmtN(v) },
+  units: { label: 'Товары, шт.',          short: 'Штуки',    fmt: v => fmtN(v) + ' шт.', axis: v => fmtN(v) },
+  dm:    { label: 'Время доставки, мин.', short: 'Доставка', fmt: v => v == null ? '—' : NF1.format(v) + ' мин', axis: v => fmtN(v) },
+};
+const ITEM_MODES = {
+  orders: { label: 'Чаще всего',  sub: 'В скольких заказах встречалась позиция', fmt: v => fmtN(v) + ' зак.' },
+  units:  { label: 'Штуки',       sub: 'Сколько штук куплено всего',              fmt: v => fmtN(v) + ' шт.' },
+  spend:  { label: 'Траты',       sub: 'Сколько денег потрачено на позицию',      fmt: rub },
+};
+const COLS = [
+  { key: 'name', label: 'Позиция' }, { key: 'cat', label: 'Категория' }, { key: 'orders', label: 'Заказов' },
+  { key: 'units', label: 'Штук' }, { key: 'spend', label: 'Траты' }, { key: 'avgp', label: 'Ср. цена' },
+  { key: 'disc', label: 'Скидки' }, { key: 'last', label: 'Последний раз' },
+];
+
+// ---------- tooltip ----------
+const tip = document.getElementById('tip');
+function showTip(evt, title, rows, image) {
+  tip.replaceChildren();
+  if (image) { const im = document.createElement('img'); im.src = image; im.alt = ''; tip.appendChild(im); }
+  const t = document.createElement('div'); t.className = 't-title'; t.textContent = title; tip.appendChild(t);
+  for (const [label, value] of rows) {
+    const r = document.createElement('div'); r.className = 't-row';
+    const s = document.createElement('span'); s.textContent = label;
+    const b = document.createElement('b'); b.textContent = value;
+    r.append(s, b); tip.appendChild(r);
+  }
+  tip.style.opacity = 1;
+  moveTip(evt);
+}
+function moveTip(evt) {
+  let x, y;
+  if (evt.clientX != null && evt.type !== 'focus') { x = evt.clientX; y = evt.clientY; }
+  else { const r = evt.target.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top; }
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let left = x + 14, top = y - h - 10;
+  if (left + w > window.innerWidth - 8) left = x - w - 14;
+  if (top < 8) top = y + 16;
+  tip.style.left = Math.max(8, left) + 'px'; tip.style.top = top + 'px';
+}
+const hideTip = () => { tip.style.opacity = 0; };
+
+// ---------- d3 charts ----------
+function roundedTop(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h);
+  if (h <= 0) return '';
+  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+}
+
+function drawBars(el, data, opt) {
+  // data: [{date, value, label, rows}]
+  const W = el.clientWidth, H = opt.height || 300;
+  const m = { t: 22, r: 8, b: 26, l: opt.left || 52 };
+  d3.select(el).selectAll('*').remove();
+  if (!W) return;
+  const svg = d3.select(el).append('svg').attr('width', W).attr('height', H);
+  const x = d3.scaleBand().domain(data.map((d, i) => i)).range([m.l, W - m.r])
+    .paddingInner(data.length > 1 ? Math.min(0.3, Math.max(0, 2 / ((W - m.l - m.r) / data.length))) : 0).paddingOuter(0.05);
+  const vals = data.map(d => d.value).filter(v => v != null);
+  const y = d3.scaleLinear().domain([0, (d3.max(vals) || 1) * 1.08]).nice(5).range([H - m.b, m.t]);
+
+  svg.append('g').selectAll('line').data(y.ticks(5)).join('line')
+    .attr('class', d => d === 0 ? 'baseline' : 'gridline')
+    .attr('x1', m.l).attr('x2', W - m.r).attr('y1', d => y(d) + .5).attr('y2', d => y(d) + .5);
+  svg.append('g').selectAll('text').data(y.ticks(5)).join('text')
+    .attr('x', m.l - 8).attr('y', d => y(d)).attr('dy', '0.32em').attr('text-anchor', 'end').text(opt.axis);
+
+  const bw = x.bandwidth();
+  const bars = svg.append('g').selectAll('path').data(data).join('path')
+    .attr('class', 'bar')
+    .attr('d', (d, i) => d.value ? roundedTop(x(i), y(d.value), bw, y(0) - y(d.value), bw >= 6 ? 4 : bw >= 3 ? 1 : 0) : '');
+
+  // x labels — thinned to fit
+  const step = Math.max(1, Math.ceil(data.length / Math.max(1, (W - m.l) / (opt.labelWidth || 62))));
+  svg.append('g').selectAll('text').data(data.filter((d, i) => i % step === 0)).join('text')
+    .attr('x', d => x(data.indexOf(d)) + bw / 2).attr('y', H - m.b + 16).attr('text-anchor', 'middle')
+    .text(d => d.short);
+
+  // mean line + selective label on the max bar
+  if (vals.length > 1 && opt.mean !== false) {
+    const mean = d3.mean(vals);
+    svg.append('line').attr('class', 'meanline').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(mean)).attr('y2', y(mean));
+    svg.append('text').attr('class', 'halo').attr('x', m.l + 6).attr('y', y(mean) - 5).text('среднее ' + opt.fmt(mean));
+  }
+  if (vals.length) {
+    const iMax = d3.maxIndex(data, d => d.value ?? -Infinity);
+    const xm = x(iMax) + bw / 2;
+    svg.append('text').attr('class', 'val').attr('x', Math.min(Math.max(xm, m.l + 30), W - 30)).attr('y', y(data[iMax].value) - 7)
+      .attr('text-anchor', 'middle').text(opt.fmt(data[iMax].value));
+  }
+
+  // hit targets: full band height
+  const step2 = x.step();
+  svg.append('g').selectAll('rect').data(data).join('rect')
+    .attr('class', 'hit').attr('tabindex', data.length <= 60 ? 0 : null)
+    .attr('x', (d, i) => x(i) - (step2 - bw) / 2).attr('width', step2).attr('y', m.t).attr('height', H - m.t - m.b)
+    .on('pointerenter focus', function (evt, d) {
+      const i = data.indexOf(d);
+      bars.classed('hl', (_, j) => j === i);
+      showTip(evt, d.label, d.rows);
+    })
+    .on('pointermove', moveTip)
+    .on('pointerleave blur', () => { bars.classed('hl', false); hideTip(); })
+    .on('click keydown', (evt, d) => {
+      if (evt.type === 'keydown' && evt.key !== 'Enter') return;
+      if (opt.onClick) { hideTip(); opt.onClick(d); }
+    })
+    .style('cursor', opt.onClick ? 'pointer' : 'default');
+}
+
+function drawItems(el, items, opt) {
+  d3.select(el).selectAll('*').remove();
+  if (!items.length) return;
+  const W = el.clientWidth, rowH = 46, img = 38, lx = img + 12;
+  const H = items.length * rowH;
+  const svg = d3.select(el).append('svg').attr('width', W).attr('height', H);
+  const valW = 74;
+  const x = d3.scaleLinear().domain([0, d3.max(items, d => d.value) || 1]).range([0, Math.max(40, W - lx - valW)]);
+  const maxChars = Math.max(10, Math.floor((W - lx) / 6.6));
+  const g = svg.selectAll('g').data(items).join('g').attr('transform', (d, i) => `translate(0,${i * rowH})`);
+  g.append('rect').attr('class', d => 'row-hit' + (d.name === opt.selected ? ' sel' : ''))
+    .attr('x', -4).attr('width', W + 4).attr('y', 1).attr('height', rowH - 2).attr('rx', 8);
+  g.append('rect').attr('class', 'thumb-bg').attr('x', 0).attr('y', 4).attr('width', img).attr('height', img).attr('rx', 7).attr('fill', '#fff').style('fill', '#fff');
+  g.append('image').attr('href', d => imgOf(d.name)).attr('x', 2).attr('y', 6).attr('width', img - 4).attr('height', img - 4)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+  g.append('text').attr('class', 'lbl').attr('x', lx).attr('y', 17)
+    .text(d => d.name.length > maxChars ? d.name.slice(0, maxChars - 1) + '…' : d.name);
+  g.append('path').attr('class', 'bar')
+    .attr('d', d => {
+      const w = Math.max(2, x(d.value)), h = 12, y0 = 25, r = Math.min(4, w / 2);
+      return `M${lx},${y0}H${lx + w - r}Q${lx + w},${y0} ${lx + w},${y0 + r}V${y0 + h - r}Q${lx + w},${y0 + h} ${lx + w - r},${y0 + h}H${lx}Z`;
+    });
+  g.append('text').attr('class', 'val').attr('x', d => lx + Math.max(2, x(d.value)) + 6).attr('y', 35).text(d => opt.fmt(d.value));
+  g.style('cursor', 'pointer')
+    .on('pointerenter', (evt, d) => showTip(evt, d.name, [
+      ['Категория', d.cat], ['Заказов', fmtN(d.orders)], ['Штук', fmtN(d.units)],
+      ['Потрачено', rub(d.spend)], ['Ср. цена', rub(d.spend / d.units)], ['Последний раз', fmtDate(d.last)],
+    ], imgOf(d.name)))
+    .on('pointermove', moveTip).on('pointerleave', hideTip)
+    .on('click', (evt, d) => { hideTip(); opt.onClick(d.name); });
+}
+
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+function drawHeat(el, rows, cols, value, opt) {
+  // rows: [{key,label,img}], cols: [{key,short,label}], value(r,c) -> number
+  d3.select(el).selectAll('*').remove();
+  const W = el.clientWidth;
+  if (!W || !rows.length || !cols.length) return;
+  const m = { t: 4, r: 4, b: 24, l: opt.left || 140 };
+  const cellH = opt.cellH || 26;
+  const H = m.t + rows.length * cellH + m.b;
+  const svg = d3.select(el).append('svg').attr('width', W).attr('height', H);
+  const x = d3.scaleBand().domain(cols.map(c => c.key)).range([m.l, W - m.r]).paddingInner(cols.length > 80 ? 0 : 0.06);
+  const y = d3.scaleBand().domain(rows.map(r => r.key)).range([m.t, H - m.b]).paddingInner(0.08);
+  const cells = [];
+  rows.forEach(r => cols.forEach(c => cells.push({ r, c, v: value(r, c) })));
+  const max = d3.max(cells, d => d.v) || 1;
+  const color = d3.scaleSequentialSqrt(d3.interpolateLab(cssVar('--seq-lo'), cssVar('--seq-hi'))).domain([0, max]);
+  const zero = cssVar('--zero-cell');
+  const rr = Math.min(3, x.bandwidth() / 3);
+  svg.append('g').selectAll('rect').data(cells).join('rect')
+    .attr('x', d => x(d.c.key)).attr('y', d => y(d.r.key))
+    .attr('width', Math.max(0.5, x.bandwidth())).attr('height', y.bandwidth()).attr('rx', rr)
+    .attr('fill', d => d.v ? color(d.v) : zero)
+    .on('pointerenter', function (evt, d) {
+      d3.select(this).attr('stroke', cssVar('--ink')).attr('stroke-width', 1.5);
+      showTip(evt, `${d.r.label} · ${d.c.label}`, [[opt.valueLabel, opt.fmt(d.v)]]);
+    })
+    .on('pointermove', moveTip)
+    .on('pointerleave', function () { d3.select(this).attr('stroke', null); hideTip(); });
+
+  const lab = svg.append('g').selectAll('g').data(rows).join('g')
+    .attr('transform', r => `translate(0,${y(r.key) + y.bandwidth() / 2})`);
+  let tx = 0;
+  if (opt.images) {
+    lab.append('rect').attr('x', 0).attr('y', -11).attr('width', 22).attr('height', 22).attr('rx', 5).style('fill', '#fff');
+    lab.append('image').attr('href', r => r.img).attr('x', 1).attr('y', -10).attr('width', 20).attr('height', 20);
+    tx = 28;
+  }
+  lab.append('text').attr('class', 'lbl').attr('x', tx).attr('dy', '0.32em').text(r => r.label);
+
+  const step = Math.max(1, Math.ceil(cols.length / Math.max(1, (W - m.l) / (opt.labelWidth || 52))));
+  svg.append('g').selectAll('text').data(cols.filter((c, i) => i % step === 0)).join('text')
+    .attr('x', c => x(c.key) + x.bandwidth() / 2).attr('y', H - m.b + 15).attr('text-anchor', 'middle').text(c => c.short);
+}
+
+// ---------- app ----------
+const PRESETS = [
+  { id: 'all', label: 'Всё время', from: DATA_MIN, to: DATA_MAX },
+  { id: 'l12', label: 'Последние 12 месяцев', from: d3.timeDay.offset(d3.timeMonth.offset(DATA_MAX, -12), 1), to: DATA_MAX },
+  { id: 'l3', label: 'Последние 3 месяца', from: d3.timeDay.offset(d3.timeMonth.offset(DATA_MAX, -3), 1), to: DATA_MAX },
+  ...d3.range(DATA_MIN.getFullYear(), DATA_MAX.getFullYear() + 1).reverse()
+    .map(y => ({ id: 'y' + y, label: y + ' год', from: new Date(y, 0, 1), to: new Date(y, 11, 31) })),
+];
+
+createApp({
+  data() {
+    return {
+      ORDERS, DATA_MIN, DATA_MAX, ITEM_COUNT, CATS, GRAN, METRICS, ITEM_MODES, COLS, presets: PRESETS,
+      preset: 'all', from: iso(DATA_MIN), to: iso(DATA_MAX), gran: 'month', status: 'delivered', cats: [],
+      metric: 'spend', itemMode: 'orders', topN: 15, showServices: false,
+      selected: null, search: '', sortKey: 'spend', sortDir: -1, drill: [], themeTick: 0,
+    };
+  },
+  computed: {
+    fromD() { return parseD(this.from); },
+    toD() { return parseD(this.to); },
+    rangeDays() { return d3.timeDay.count(this.fromD, this.toD) + 1; },
+    isModified() { return this.preset !== 'all' || this.cats.length || this.status !== 'delivered' || this.gran !== 'month' || this.drill.length; },
+    // all filters except categories
+    base() {
+      return ORDERS.filter(o => o.date >= this.fromD && o.date <= this.toD &&
+        (this.status === 'all' || (this.status === 'delivered') === o.delivered));
+    },
+    filtered() { return this.byCats(this.base); },
+    prevFiltered() {
+      const to = d3.timeDay.offset(this.fromD, -1), from = d3.timeDay.offset(this.fromD, -this.rangeDays);
+      if (to < DATA_MIN) return null;
+      return this.byCats(ORDERS.filter(o => o.date >= from && o.date <= to &&
+        (this.status === 'all' || (this.status === 'delivered') === o.delivered)));
+    },
+    kpis() { return metrics(this.filtered); },
+    kpiList() {
+      const k = this.kpis, p = this.prevFiltered && this.prevFiltered.length ? metrics(this.prevFiltered) : null;
+      const d = key => (p && p[key] && k[key] != null) ? k[key] / p[key] - 1 : null;
+      const canceled = this.byCats(ORDERS.filter(o => !o.delivered && o.date >= this.fromD && o.date <= this.toD)).length;
+      const all = this.byCats(ORDERS.filter(o => o.date >= this.fromD && o.date <= this.toD)).length;
+      return [
+        { key: 'n', label: 'Заказы', value: fmtN(k.n), delta: d('n') },
+        { key: 'spend', label: 'Траты', value: rub(k.spend), delta: d('spend') },
+        { key: 'avg', label: 'Средний чек', value: k.avg == null ? '—' : rub(k.avg), delta: d('avg') },
+        { key: 'disc', label: 'Сэкономлено на скидках', value: rub(k.disc), delta: d('disc'),
+          note: fmtPct(k.discPct) + ' от цены без скидки' },
+        { key: 'units', label: 'Куплено товаров', value: fmtN(k.units) + ' шт.', delta: d('units') },
+        { key: 'svc', label: 'Доставка и упаковка', value: rub(k.svc), delta: d('svc'),
+          note: fmtPct(k.spend ? k.svc / k.spend : 0) + ' всех трат' },
+        { key: 'dm', label: 'Среднее время доставки', value: METRICS.dm.fmt(k.dm), delta: d('dm') },
+        { key: 'cx', label: 'Отменённые заказы', value: fmtN(canceled), delta: null,
+          note: fmtPct(all ? canceled / all : 0) + ' от всех заказов за период' },
+      ];
+    },
+    periodsList() { return periods(this.gran, this.fromD, this.toD); },
+    periodsCount() { return this.periodsList.length; },
+    series() {
+      const g = GRAN[this.gran];
+      const buckets = new Map(this.periodsList.map(p => [+p, []]));
+      for (const o of this.filtered) { const b = buckets.get(+g.floor(o.date)); if (b) b.push(o); }
+      return this.periodsList.map(p => {
+        const mm = metrics(buckets.get(+p));
+        return {
+          date: p, short: g.short(p), label: g.long(p), value: mm[this.metric] ?? null,
+          rows: [['Заказы', fmtN(mm.n)], ['Траты', rub(mm.spend)], ['Средний чек', mm.avg == null ? '—' : rub(mm.avg)],
+                 ['Скидки', rub(mm.disc)], ['Товары', fmtN(mm.units) + ' шт.'], ['Доставка', METRICS.dm.fmt(mm.dm)]],
+        };
+      });
+    },
+    drillLabel() { return this.drill.length ? this.drill[this.drill.length - 1].label : ''; },
+    itemStats() {
+      const map = new Map();
+      for (const o of this.filtered) {
+        const seen = new Set();
+        for (const l of o.lines) {
+          let s = map.get(l.name);
+          if (!s) map.set(l.name, s = { name: l.name, cat: l.cat, orders: 0, units: 0, spend: 0, disc: 0, first: o.date, last: o.date });
+          if (!seen.has(l.name)) { s.orders++; seen.add(l.name); }
+          s.units += l.q; s.spend += l.sum; s.disc += l.disc;
+          if (o.date < s.first) s.first = o.date;
+          if (o.date > s.last) s.last = o.date;
+        }
+      }
+      return [...map.values()];
+    },
+    topItems() {
+      return this.itemStats.filter(s => this.showServices || s.cat !== SERVICE)
+        .map(s => ({ ...s, value: s[this.itemMode] }))
+        .sort((a, b) => b.value - a.value || b.spend - a.spend).slice(0, this.topN);
+    },
+    selItem() {
+      const s = this.itemStats.find(s => s.name === this.selected);
+      return s ? { ...s, share: fmtPct(this.filtered.length ? s.orders / this.filtered.length : 0) } : null;
+    },
+    catStats() {
+      const map = new Map();
+      let total = 0;
+      for (const o of this.base) {
+        const seen = new Set();
+        for (const l of o.lines) {
+          let c = map.get(l.cat);
+          if (!c) map.set(l.cat, c = { cat: l.cat, spend: 0, units: 0, orders: 0, disc: 0, byItem: new Map() });
+          if (!seen.has(l.cat)) { c.orders++; seen.add(l.cat); }
+          c.spend += l.sum; c.units += l.q; c.disc += l.disc; total += l.sum;
+          const it = c.byItem.get(l.name) || { spend: 0, n: 0 };
+          it.spend += l.sum; it.n += l.q; c.byItem.set(l.name, it);
+        }
+      }
+      return [...map.values()].map(c => {
+        const items = [...c.byItem.entries()];
+        const bySpend = items.slice().sort((a, b) => b[1].spend - a[1].spend);
+        const byN = items.slice().sort((a, b) => b[1].n - a[1].n);
+        return {
+          cat: c.cat, spend: c.spend, units: c.units, orders: c.orders, disc: c.disc, items: items.length,
+          share: total ? c.spend / total : 0, top: byN[0][0],
+          imgs: bySpend.slice(0, 3).map(([n]) => imgOf(n)).filter(Boolean),
+        };
+      }).sort((a, b) => b.spend - a.spend);
+    },
+    maxCatShare() { return d3.max(this.catStats, c => c.share) || 1; },
+    catGran() {
+      // keep the heatmap readable: no more than ~70 columns
+      const order = ['day', 'week', 'month', 'quarter', 'year'];
+      for (let i = order.indexOf(this.gran); i < order.length; i++) {
+        if (periods(order[i], this.fromD, this.toD).length <= 70) return order[i];
+      }
+      return 'year';
+    },
+    catGranLabel() {
+      return GRAN[this.catGran].label.toLowerCase() + (this.catGran !== this.gran ? ' (укрупнено, чтобы поместилось)' : '');
+    },
+    tableRows() {
+      const q = this.search.trim().toLowerCase();
+      const k = this.sortKey, dir = this.sortDir;
+      return this.itemStats.filter(s => !q || s.name.toLowerCase().includes(q))
+        .map(s => ({ ...s, avgp: s.spend / s.units }))
+        .sort((a, b) => {
+          const va = a[k], vb = b[k];
+          return (typeof va === 'string' ? va.localeCompare(vb, 'ru') : va - vb) * dir;
+        });
+    },
+    drawKey() {
+      return [this.series, this.topItems, this.selItem, this.catStats, this.catGran, this.filtered, this.themeTick, this.selected];
+    },
+  },
+  watch: {
+    drawKey() { nextTick(this.drawAll); },
+  },
+  methods: {
+    rub, fmtN, fmtPct, fmtDate, iso, imgOf,
+    byCats(orders) {
+      if (!this.cats.length) return orders;
+      const set = new Set(this.cats);
+      const out = [];
+      for (const o of orders) {
+        const lines = o.lines.filter(l => set.has(l.cat));
+        if (lines.length) out.push({ ...o, lines });
+      }
+      return out;
+    },
+    applyPreset() {
+      const p = PRESETS.find(p => p.id === this.preset);
+      if (!p) return;
+      this.from = iso(p.from < DATA_MIN ? DATA_MIN : p.from);
+      this.to = iso(p.to > DATA_MAX ? DATA_MAX : p.to);
+      this.drill = [];
+      if (p.id.startsWith('y') || p.id === 'l12') this.gran = 'month';
+      if (p.id === 'l3') this.gran = 'week';
+    },
+    toggleCat(c) {
+      if (!c) return;
+      this.cats = this.cats.includes(c) ? this.cats.filter(x => x !== c) : [...this.cats, c];
+    },
+    reset() {
+      this.preset = 'all'; this.applyPreset(); this.cats = []; this.status = 'delivered'; this.gran = 'month'; this.drill = [];
+    },
+    drillInto(d) {
+      const g = GRAN[this.gran];
+      if (!g.finer) return;
+      this.drill.push({ from: this.from, to: this.to, gran: this.gran, preset: this.preset, label: d.label });
+      const end = d3.timeDay.offset(g.next(d.date), -1);
+      this.from = iso(d.date < DATA_MIN ? DATA_MIN : d.date);
+      this.to = iso(end > DATA_MAX ? DATA_MAX : end);
+      this.gran = g.finer; this.preset = 'custom';
+    },
+    drillUp() {
+      const s = this.drill.pop();
+      Object.assign(this, { from: s.from, to: s.to, gran: s.gran, preset: s.preset });
+    },
+    select(name) {
+      this.selected = name;
+      if (window.innerWidth < 1000) nextTick(() => this.$refs.itemTs?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    },
+    sortBy(k) {
+      if (this.sortKey === k) this.sortDir = -this.sortDir;
+      else { this.sortKey = k; this.sortDir = (k === 'name' || k === 'cat') ? 1 : -1; }
+    },
+    drawAll() {
+      const mt = METRICS[this.metric];
+      if (this.$refs.main) drawBars(this.$refs.main, this.series, {
+        fmt: mt.fmt, axis: mt.axis, height: 320,
+        onClick: GRAN[this.gran].finer ? this.drillInto : null,
+      });
+      if (this.$refs.items) drawItems(this.$refs.items, this.topItems, {
+        fmt: ITEM_MODES[this.itemMode].fmt, onClick: this.select, selected: this.selected,
+      });
+      if (this.$refs.itemTs && this.selItem) {
+        const g = GRAN[this.gran], name = this.selected;
+        const buckets = new Map(this.periodsList.map(p => [+p, 0]));
+        for (const o of this.filtered) for (const l of o.lines) if (l.name === name) {
+          const k = +g.floor(o.date); if (buckets.has(k)) buckets.set(k, buckets.get(k) + l.q);
+        }
+        drawBars(this.$refs.itemTs, this.periodsList.map(p => ({
+          date: p, short: g.short(p), label: g.long(p), value: buckets.get(+p), rows: [['Куплено', fmtN(buckets.get(+p)) + ' шт.']],
+        })), { fmt: v => NF1.format(v) + ' шт.', axis: v => fmtN(v), height: 180, left: 36, mean: false });
+      }
+      if (this.$refs.week) {
+        const counts = d3.range(7).map(() => d3.range(24).map(() => 0));
+        for (const o of this.filtered) if (o.created != null) {
+          counts[(o.date.getDay() + 6) % 7][Math.floor(o.created / 60) % 24]++;
+        }
+        const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+        // show only the active part of the day (±1 h) so cells stay readable
+        const hourTotals = d3.range(24).map(h => d3.sum(counts, r => r[h]));
+        const hMin = Math.max(0, (hourTotals.findIndex(v => v > 0) + 24) % 24 - 1);
+        const hMax = Math.min(23, 23 - [...hourTotals].reverse().findIndex(v => v > 0) + 1);
+        drawHeat(this.$refs.week,
+          days.map((d, i) => ({ key: i, label: d })),
+          d3.range(hMin, hMax + 1).map(h => ({ key: h, short: `${pad(h)}:00`, label: `${pad(h)}:00–${pad(h)}:59` })),
+          (r, c) => counts[r.key][c.key],
+          { left: 30, cellH: 34, labelWidth: 44, valueLabel: 'Заказов', fmt: v => fmtN(v) });
+      }
+      if (this.$refs.catHeat) {
+        const cg = GRAN[this.catGran];
+        const cols = periods(this.catGran, this.fromD, this.toD).map(p => ({ key: +p, short: cg.short(p), label: cg.long(p) }));
+        const sums = new Map();
+        for (const o of this.base) {
+          const pk = +cg.floor(o.date);
+          for (const l of o.lines) {
+            const k = l.cat + '|' + pk; sums.set(k, (sums.get(k) || 0) + l.sum);
+          }
+        }
+        const rows = this.catStats.filter(c => !this.cats.length || this.cats.includes(c.cat))
+          .map(c => ({ key: c.cat, label: c.cat, img: c.imgs[0] }));
+        drawHeat(this.$refs.catHeat, rows, cols, (r, c) => sums.get(r.key + '|' + c.key) || 0,
+          { left: 150, cellH: 30, images: true, valueLabel: 'Потрачено', fmt: rub, labelWidth: 56 });
+      }
+    },
+  },
+  mounted() {
+    this.drawAll();
+    let t, lastW = this.$el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (this.$el.clientWidth === lastW) return;
+      lastW = this.$el.clientWidth;
+      clearTimeout(t); t = setTimeout(() => this.drawAll(), 80);
+    });
+    ro.observe(this.$el);
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.themeTick++);
+  },
+}).mount('#app');
+</script>
+</body>
+</html>
